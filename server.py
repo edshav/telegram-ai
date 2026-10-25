@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
 from telethon import TelegramClient
 from telethon.tl.functions.contacts import SearchRequest
 from telethon.tl.types import MessageEntityTextUrl
@@ -23,6 +23,7 @@ from telethon.utils import get_display_name
 SESSION = Path(__file__).with_name("telegram.session")
 MAX_LIMIT = 200
 MAX_TEXT = 300
+MAX_PHOTOS = 10  # a Telegram album holds at most 10 items
 
 client: TelegramClient
 
@@ -56,10 +57,12 @@ def links(msg) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def fmt(msg, with_chat: bool = False) -> str:
-    text = (msg.message or "").replace("\n", " ")
-    if len(text) > MAX_TEXT:
-        text = text[:MAX_TEXT] + "…"
+def fmt(msg, with_chat: bool = False, full: bool = False) -> str:
+    text = msg.message or ""
+    if not full:
+        text = text.replace("\n", " ")
+        if len(text) > MAX_TEXT:
+            text = text[:MAX_TEXT] + "…"
     if found := links(msg):
         text = f"{text} [links: {' '.join(found)}]"
     if msg.media:
@@ -68,7 +71,7 @@ def fmt(msg, with_chat: bool = False) -> str:
     sender = get_display_name(msg.sender) or msg.sender_id
     if username := getattr(msg.sender, "username", None):
         sender = f"{sender} @{username}"
-    return f"{chat}{msg.date.astimezone():%Y-%m-%d %H:%M} | {sender} | {text}"
+    return f"{chat}{msg.date.astimezone():%Y-%m-%d %H:%M} | #{msg.id} | {sender} | {text}"
 
 
 @mcp.tool()
@@ -96,7 +99,7 @@ async def find_chats(query: str, limit: int = 20) -> str:
 
 @mcp.tool()
 async def read_chat(chat_id: int | str, limit: int = 50, since: str | None = None) -> str:
-    """Last messages of a chat, oldest first, as `date | sender | text` (local time).
+    """Last messages of a chat, oldest first, as `date | #id | sender | text` (local time).
     chat_id is an id from list_chats or a public @username (readable without joining).
     `since` is an ISO date/datetime (local time if no offset); older messages are skipped."""
     since_dt = datetime.fromisoformat(since).astimezone() if since else None
@@ -115,6 +118,27 @@ async def search(query: str, chat_id: int | str | None = None, limit: int = 50) 
     out = [fmt(m, with_chat=chat_id is None)
            async for m in client.iter_messages(chat_id, search=query, limit=min(limit, MAX_LIMIT))]
     return "\n".join(out) or "Nothing found."
+
+
+@mcp.tool(structured_output=False)
+async def read_post(chat_id: int | str, message_id: int, photos: bool = True) -> list:
+    """One message untruncated, plus the photos of its album when `photos` is true.
+    message_id is the `#id` from read_chat or search; any message of an album finds the whole album."""
+    msg = await client.get_messages(chat_id, ids=message_id)
+    if not msg:
+        return ["No such message."]
+    album = [msg]
+    if msg.grouped_id:
+        near = await client.get_messages(chat_id, ids=list(range(message_id - MAX_PHOTOS + 1, message_id + MAX_PHOTOS)))
+        album = [m for m in near if m and m.grouped_id == msg.grouped_id]
+    out = ["\n".join(fmt(m, full=True) for m in album if m.message) or fmt(msg, full=True)]
+    if photos:
+        for m in album:
+            if m.photo:
+                # 800px "x" size keeps each image small for the model; fall back to the largest
+                data = await m.download_media(bytes, thumb="x") or await m.download_media(bytes)
+                out.append(Image(data=data, format="jpeg"))
+    return out
 
 
 async def login():

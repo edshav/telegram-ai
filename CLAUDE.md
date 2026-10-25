@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A read-only Telegram MCP server for the user's own account, built on Telethon (user API, not a bot).
 It is a single PEP 723 script, `server.py`: dependencies live in its `# /// script` header, so there is
 no `pyproject.toml` and no lockfile. Claude Code spawns it over stdio as the `telegram` MCP server
-(tools `list_chats`, `find_chats`, `read_chat`, `search`).
+(tools `list_chats`, `find_chats`, `read_chat`, `search`, `read_post`).
 
 ## Commands
 
@@ -34,7 +34,8 @@ Claude Code session (it respawns the server) and call the MCP tools.
   access hashes. Tools take chat ids as printed by `list_chats`, or a public `@username`
   (from `find_chats`), which Telethon resolves and reads without joining.
 - **Output is plain text lines built by `fmt`**, with dates in local time. `MAX_LIMIT` caps every
-  `limit` argument and `MAX_TEXT` truncates message text, which keeps tool output small for the model.
+  `limit` argument and `MAX_TEXT` truncates message text, which keeps tool output small for the model;
+  `read_post` returns one message (or album) untruncated with its photos as images.
   `fmt` still appends the sender's `@username` and a `[links: …]` tail (hidden link URLs, @mentions,
   t.me/wa.me links from the full text), so contacts survive truncation.
 - Telethon is pinned `<2`: v2 has a different API.
