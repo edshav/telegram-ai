@@ -1,0 +1,12 @@
+{
+  "name": "telegram",
+  "description": "Read-only Telegram for your own account: list, search and read chats and public channels.",
+  "author": { "name": "Eduard Shavyrko", "url": "https://github.com/edshav" },
+  "repository": "https://github.com/edshav/telegram-ai",
+  "mcpServers": {
+    "telegram": {
+      "command": "uv",
+      "args": ["run", "--no-config", "--script", "${CLAUDE_PLUGIN_ROOT}/server.py"]
+    }
+  }
+}
