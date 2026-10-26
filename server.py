@@ -36,6 +36,7 @@ MAX_TEXT = 300
 MAX_PHOTOS = 10  # a Telegram album holds at most 10 items
 
 client: TelegramClient | None = None
+down: str | None = None  # why startup could not reach Telegram; replaces LOGIN_HINT
 
 
 def load_client() -> TelegramClient | None:
@@ -58,19 +59,24 @@ def save_creds(api_id: int, api_hash: str, session: str) -> None:
 
 def tg() -> TelegramClient:
     if client is None:
-        raise RuntimeError(LOGIN_HINT)
+        raise RuntimeError(down or LOGIN_HINT)
     return client
 
 
 @asynccontextmanager
 async def lifespan(_):
-    global client
+    global client, down
     if c := load_client():
         # never c.start() here: it prompts on stdout, which is the MCP wire
-        await c.connect()  # network errors still fail startup: accepted limit in the spec
-        if await c.is_user_authorized():
-            await c.get_dialogs()  # caches access hashes so numeric chat ids resolve
-            client = c
+        try:
+            await c.connect()
+            if await c.is_user_authorized():
+                await c.get_dialogs()  # caches access hashes so numeric chat ids resolve
+                client = c
+        except Exception as e:  # a crash here gets cached by Claude Code and hides the tools
+            # connect() already sends api_id, so bad credentials can land here too
+            down = (f"Telegram failed when the server started ({e}). Ask the user to reconnect "
+                    f"telegram in /mcp. If the same error comes back: {LOGIN_HINT}")
     try:
         yield
     finally:

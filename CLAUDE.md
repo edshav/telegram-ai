@@ -27,7 +27,10 @@ change start Claude Code with `--plugin-dir` and call the MCP tools.
   `connect()`s; the interactive `client.start()` lives in the `login` subcommand.
 - **Not logged in is not a crash.** Missing, broken or revoked credentials leave `client` as `None`,
   and every tool goes through `tg()`, which raises `LOGIN_HINT` as a tool error. The hint is
-  addressed to the model and tells it not to run `login` itself.
+  addressed to the model and tells it not to run `login` itself. A fast failure at startup (refused,
+  unreachable, `RPCError -500`) is not a crash either: `client` stays `None` and `tg()` raises the
+  `down` message, which points to `/mcp` reconnect first and `LOGIN_HINT` if the error persists.
+  A silently dropping network still outlasts Claude Code's 30 s startup timeout.
 - **`--no-config` on every `uv run`.** The server starts in whatever project Claude Code was opened in;
   without it uv would honour that project's `uv.toml` and could install packages from its index.
 - **Read-only by design.** The tools only read dialogs and messages. Adding anything that sends, edits,
